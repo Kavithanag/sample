@@ -1,593 +1,567 @@
-# Jenkins pipeline for CEPH Deployment
+# Jenkins pipeline for Openstack Deployment
 
 Jenkins Pipeline (or simply "Pipeline") is a suite of plugins which supports implementing and integrating continuous delivery pipelines into Jenkins. A continuous delivery pipeline is an automated expression of your process for getting software from version control right through to your users and customers.
-
-## Creating a Simple Pipeline Steps
-Initial pipeline usage typically involves the following tasks:
-1.	Downloading and installing the Pipeline plugin (Unless it is already part of your Jenkins installation)
-2.	Creating a Pipeline of a specific type
-3.	Configuring your Pipeline
-4.	Controlling Flow through your Pipeline
-5.	Scaling your Pipeline
-
-###### To create a simple pipeline from the Jenkins interface, perform the following steps:
-1.	Click **New Item** on your Jenkins home page, enter a name for your (pipeline) job, select **Pipeline**, and click **OK**.
-2.	In the Script text area of the configuration screen, enter your pipeline syntax. If you are new to pipeline creation, you might want to start by opening Snippet Generator and selecting the “Hello Word” snippet. **Note:** Pipelines are written as Groovy scripts that tell Jenkins what to do when they are run, but because relevant bits of syntax are introduced as needed, you do not need deep expertise in Groovy to create them, although basic understanding of Groovy is helpful.
-3.	Click **Save**.
-4.	Click Build **Now** to create the pipeline.
-5.	Click **▾** and select **Console Output** to see the output.
-
-The steps of the CEPH_Deployment_ver1 are taken for the Jenkins pipeline. Step no refer to the step no of CEPH_Deployment_ver1 document.
-
-Jekins pipeline automated the manual steps in CEPH_Deployment_ver1.
+The steps of the Openstack_Deployment.docx are taken for the Jenkins pipeline. 
 
 ## Prerequisite:
-  Deployment Node: User should decide the deployment node. In this case deployment node is sp-dev-infra1 
-  node ( Can be any Infra node)
-  Copy the MAAS Private key into Infra 1 for keylessssh.
-  Deployment version required in SP-dev Lab is Octopus version of CEPH
+•	Install OS  on all Hosts and do networking and check all servers are able to access from terminal. Ensure all Hosts should be able to ping IP from each host to every other hosts. 
+•	Add below parameter in all servers for add time & date in history for troubleshooting 
+•	<Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> /etc/profile 
+•	<Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> ~/.bash_profile 
+•	 Make all the servers passwordless from Deployment Node. 
+
 
 ## Stages:
 Stage is block contains a series of steps in a pipeline.
-In the Jenkins pipeline we have identified the following statges:
+In the Jenkins pipeline we have identified the following statges for openstack deployment:
 
-1.	Parameters
-2.	Pre-check
-3.	Update variables
-4.	Clone repo
-5.	Create inventory
-6.	copy updated files
-7.	Execute lvcreate
-8.	Create lv files perhost
-9.	Execute
-10.	Post Check
+1)	Parameters
+2)	Update Yamls
+3)	Colne the repository
+4)	Anisble_bootstraping
+5)	Copy etc directory
+6)	Move Updated yamls to deployment node
+7)	Execute OSA playbooks
+8)	Copy Monitoring role
+
 
 ###### Stage 1: Parameters
-this stage defines the variables which are required in Jenkins pipeline.We have analysed the document and came with many parameters. We have identified following parameters:
-deployment_node_ip, enable_ceph_dashboard, generate_fsid, fsid, monitor_address_block, public_network, cluster_network, monitor_interface, inventory,  disks
+This stage defines the variables which are required in Jenkins pipeline.We have analysed the document and came with many parameters. We have identified following parameters:
+deployment_node_ip, OSA_repo, OSA_branch, container_cidr, storage_cidr, tunnel_cidr, used_ip_container, used_ip_storage, used_ip_tunnel, internal_lb_vip_address, external_lb_vip_address, name_infra_one, ip_infra_one, name_infra_two, ip_infra_two, name_infra_three, ip_infra_three, name_compute_one, ip_compute_one, name_compute_two, ip_compute_two, name_compute_three, ip_compute_three, proxy_env_url, lxc_hosts_container_image_url, security_ntp_servers, haproxy_use_keepalived, haproxy_ssl, openstack_service_publicuri_proto, keepalived_ping_address, mononeip, montwoip, monthreeip, keystone_web_server, entity_ids, sp_oidc_provider_metadata_url, sp_oidc_client_id, sp_oidc_client_secret, generate_fsid.
+
 
 *The parameter can be defined in Jenkins pipeline in following way*
-
-```shell
 properties(
     [
         parameters(
-            [string(description: 'Please enter the IP address of the host from where Ceph deployment will be executed', name: 'deployment_node_ip')
+            [string(description: 'Please enter the IP address of the host from where Openstack deployment will be executed', name: 'deployment_node_ip')
                           )
             ]
       ]       
+
  )
-```
 
-The code snippet from the Jenkins file for parameter declaration
 
-```shell
+*The code snippet from the Jenkins file for parameter declaration*
+
+  ```shell
 properties(
     [
         parameters(
-            [string(description: 'Please enter the IP address of the host from where Ceph deployment will be executed', name: 'deployment_node_ip'),
-            choice(name: 'enable_ceph_dashboard', choices: ['false', 'true'], description: 'Ceph Dashboard'),
-            choice(name: 'generate_fsid', choices: ['false', 'true'], description: 'If new fsid need to generated select true'),
-            string(description: 'Enter the cluster fsid, create using python -c "import uuid; print(str(uuid.uuid4()))"', name: 'fsid', defaultValue: '6fad73d1-9cf6-47c0-8ac1-227a79a8d276'),
-            string(description: 'Enter the CIDR for monitor  netwrok', name: 'monitor_address_block', defaultValue: '10.246.184.0/24'),
-            string(description: 'Enter the CIDR for public  netwrok', name: 'public_network', defaultValue: '10.246.184.0/24'),
-            string(description: 'Enter the CIDR for cluster network', name: 'cluster_network', defaultValue: '10.246.185.0/24'),
-            string(description: 'monitor interface name', name: 'monitor_interface',  defaultValue:'br-mgmt'),
-            text(description: 'Paste the Ansible inventory ', name: 'inventory', defaultValue: '[all]\nsp-dev-infra[1:3]\nsp-dev-compute[1:3]\nsp-dev-storage[1:8]\n[all:vars]\nansible_python_interpreter=/usr/bin/python3\n[mons]\nsp-dev-infra[1:3]\n[mons:vars]\nansible_python_interpreter=/usr/bin/python3\n[osds]\nsp-dev-storage[1:8]\n[osds-dell]\nsp-dev-storage[1:5]\n[osds-hp]\nsp-dev-storage[6:8]\n[mgrs]\nsp-dev-infra[1:3]\n[mgrs:vars]\nansible_python_interpreter=/usr/bin/python3\n[osds:vars]\nansible_python_interpreter=/usr/bin/python3\n[osds-dell:vars]\nansible_python_interpreter=/usr/bin/python3\n[osds-hp:vars]\nansible_python_interpreter=/usr/bin/python3'),
-            text(description: 'In Each line enter the osd group name and its disk specific details seprated by comma \n Example:-  \n osds-dell,journal_size,logfile,nvvme_device,hdd_device1,hdd_device2..,hdd_device \n osds-dell,journal_size,logfile,/dev/sdw,/dev/sda,/dev/sdb,/dev/sdc,/dev/sde \n osd-hp,/dev/sdw,/dev/sda,/dev/sdb,/dev/sdc...', name: 'disks', defaultValue: 'osds-dell,18000,./lv-create-dell.log,/dev/sdw,/dev/sdb,/dev/sdc,/dev/sdd,/dev/sde,/dev/sdf,/dev/sdg,/dev/sdh,/dev/sdi,/dev/sdj,/dev/sdk,/dev/sdl,/dev/sdm,/dev/sdn,/dev/sdo,/dev/sdp,/dev/sdq,/dev/sdr,/dev/sds,/dev/sdt,/dev/sdu,/dev/sdv,/dev/sdx\nosds-hp,5500,./lv-create-hp.log,/dev/sdv,/dev/sdb,/dev/sdc,/dev/sdd,/dev/sde,/dev/sdf,/dev/sdg,/dev/sdh,/dev/sdi,/dev/sdj,/dev/sdk,/dev/sdl,/dev/sdm,/dev/sdn,/dev/sdo,/dev/sdp,/dev/sdq,/dev/sdr,/dev/sds,/dev/sdt,/dev/sdu')
-            
-            ]
-            
+            [string(description: 'Please enter the IP address of the host from where OSA deployment will be executed', name: 'deployment_node_ip'),
+            string(description: 'OSA repository ', defaultValue: 'https://github.com/openstack/openstack-ansible.git', name: 'OSA_repo'),
+            string(description: 'OSA branch. which defines the version of Openstack to be installed.', defaultValue: 'stable/train', name: 'OSA_branch'),
+            string(description: 'Enter the CIDR for container  netwrok', name: 'container_cidr'),
+            string(description: 'Enter the CIDR for storage  netwrok', name: 'storage_cidr'),
+            string(description: 'Enter the CIDR for tunnel  netwrok', name: 'tunnel_cidr'),
+            string(description: 'Enter the used IP range to avoid its assignment in container cidr for OS infra, Example: "192.168.0.10,192.168.0.30"',     name: 'used_ip_container'),
+            string(description: 'Enter the used IP range to avoid its assignment in storage cidr for OS infra, Example: "192.168.0.10,192.168.0.30"', name: 'used_ip_storage'),
+            string(description: 'Enter the used IP range to avoid its assignment in tunnel cidr for OS infra, Example: "192.168.0.10,192.168.0.30"', name: 'used_ip_tunnel'),
+            string(description: 'internal_lb_vip_address', name: 'internal_lb_vip_address'),
+            string(description: 'external_lb_vip_address', name: 'external_lb_vip_address'),
+            string(description: 'Hostname of Infra host 1 ', name: 'name_infra_one'),
+            string(description: 'IP address of Infra host 1', name: 'ip_infra_one'),
+            string(description: 'Hostname of Infra host 2 ', name: 'name_infra_two'),
+            string(description: 'IP address of Infra host 2 ', name: 'ip_infra_two'),
+            string(description: 'Hostname of Infra host 3', name: 'name_infra_three'),
+            string(description: 'IP address of Infra host 3 ', name: 'ip_infra_three'),
+            string(description: 'Hostname of Compute host 1 ', name: 'name_compute_one'),
+            string(description: 'IP address of Compute host 1', name: 'ip_compute_one'),
+            string(description: 'Hostname of Compute host 2', name: 'name_compute_two'),
+            string(description: 'IP address of Compute host 2', name: 'ip_compute_two'),
+            string(description: 'Hostname of Compute host 3', name: 'name_compute_three'),
+            string(description: 'IP address of Compute host 3', name: 'ip_compute_three'),
+            string(description: 'proxy_env_url', defaultValue: 'http://10-246-183-0--25.maas-internal:8000/', name: 'proxy_env_url'),
+            string(description: 'lxc_hosts_container_image_url', defaultValue: 'http://cdimage.ubuntu.com/ubuntu-base/releases/18.04/release/ubuntu-base-18.04.5-base-amd64.tar.gz', name: 'lxc_hosts_container_image_url'),
+            string(description: 'security_ntp_servers', defaultValue: '164.100.255.1', name: 'security_ntp_servers'),
+            string(description: 'Need to user haproxy_use_keepalived, mark it true or false', defaultValue: 'True', name: 'haproxy_use_keepalived'),
+            string(description: 'Need to use SSL for haproxy_ssl, mark it True of false', defaultValue: 'False', name: 'haproxy_ssl'),
+            string(description: 'openstack_service_publicuri_proto, http or https', defaultValue: 'http', name: 'openstack_service_publicuri_proto'),
+            string(description: 'keepalived_ping_address' , name: 'keepalived_ping_address'),
+            string(description: 'First ceph Mon IP' , name: 'mononeip'),
+            string(description: 'Second Ceph Mon IP' , name: 'montwoip'),
+            string(description: 'Third Ceph Mon IP ' , name: 'monthreeip'),
+            string(description: 'keystone_web_server: apahce or nginx, when using OIDC it should be defaul apache', defaultValue: 'apache', name: 'keystone_web_server'),
+            string(description: 'entity_ids link: Example: https://xyz.io/auth/realms/cloud', name: 'entity_ids'),
+            string(description: 'Provide the correct URL as per environment', defaultValue: 'https://xxx/auth/realms/cloud/.well-known/openid-configuration', name: 'sp_oidc_provider_metadata_url'),
+            string(description: 'Update the correct OIDC client ID, you can get this from IDP', name: 'sp_oidc_client_id'),
+            password(description: 'Input the secret for user defined in sp_oidc_client_id', name: 'sp_oidc_client_secret')]
             )
+
     ]
-    )
-```
-###### Stage 2: Pre-check
+    ) 
+    ```
+  
+###### Stage 2: Update Yamls
+The Stage 2 update the yaml files by taking the input value from the paramterers. All the values required are updated in the yaml file.
 
-The Stage 2 lists information about all available or the specified block devices for all the servers in the group osds
+*The code snippet from the Jenkins file for update Yamls stage*
+  
+```shell 
+stage('Update Yamls') {
+readdata = readYaml file: "/var/lib/jenkins/openstack_user_config.yml"
 
-*The code snippet from the Jenkins file for pre-check stage*
+// modify
+readdata.cidr_networks.container = "$container_cidr"
+readdata.cidr_networks.storage = "$storage_cidr"
+readdata.cidr_networks.tunnel = "$tunnel_cidr"
+//readdata.used_ips[0] = "\"" + "$used_ip_container" + "\""
+readdata.used_ips[0] = "$used_ip_container"
+//readdata.used_ips[1] = "\"" + "$used_ip_storage" + "\""
+readdata.used_ips[1] = "$used_ip_storage"
+//readdata.used_ips[2] = "\"" + "$used_ip_tunnel" + "\""
+readdata.used_ips[2] = "$used_ip_tunnel"
+readdata.global_overrides.internal_lb_vip_address = "$internal_lb_vip_address"
+readdata.global_overrides.external_lb_vip_address = "$external_lb_vip_address"
 
-```shell
-stage ('Pre-check') {
-    sh """
-    ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}" "ansible osds -m shell -a 'lsblk'"
-    
-    """
-    
-}
-```
+writeYaml file: "/var/lib/jenkins/openstack_user_config-${BUILD_NUMBER}.yml", data: readdata, overwrite: true
 
-###### Stage 3: Update variables
-Stage 3 is creating host_vars directory,lv.vars.yaml from disks variable, all.yaml is updated with the parameter’s value which was declared in the first stage.
+sh '''
+   sed -i "s/^  infra1/  \${name_infra_one}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/infra1ip/\${ip_infra_one}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/^  infra2/  \${name_infra_two}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/infra2ip/\${ip_infra_two}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/^  infra3/  \${name_infra_three}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/infra3ip/\${ip_infra_three}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/^  compute1/  \${name_compute_one}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/compute1ip/\${ip_compute_one}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/^  compute2/  \${name_compute_two}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/compute2ip/\${ip_compute_two}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/^  compute3/  \${name_compute_three}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+   sed -i "s/compute3ip/\${ip_compute_three}/" /var/lib/jenkins/openstack_user_config-"${BUILD_NUMBER}".yml
+'''
 
-*The code snippet from the Jenkins file for Update variables stage*
+readdata = readYaml file: "/var/lib/jenkins/user_variable.yml"
 
-```shell
-stage('Update variables'){
-    sh 'mkdir -p  "/var/lib/jenkins/ceph/${BUILD_NUMBER}/host_vars"'
-    vardata = readYaml file: "/var/lib/jenkins/ceph/lv-vars.yaml"
-    playdata = readYaml file: "/var/lib/jenkins/ceph/lv-create.yaml"
-    // modify
+readdata.proxy_env_url = "$proxy_env_url"
+readdata.haproxy_use_keepalived = "$haproxy_use_keepalived"
+readdata.openstack_service_publicuri_proto ="$openstack_service_publicuri_proto"
+readdata.haproxy_ssl = "$haproxy_ssl"
+
+writeYaml file: "/var/lib/jenkins/user_variable-${BUILD_NUMBER}.yml", data: readdata, overwrite: true
+
+sh '''
+    sed -i "s/ntpserver/\${security_ntp_servers}/" /var/lib/jenkins/user_variable-"${BUILD_NUMBER}".yml
+    sed -i "s/mon1/\${mononeip}/" /var/lib/jenkins/user_variable-"${BUILD_NUMBER}".yml
+    sed -i "s/mon2/\${montwoip}/" /var/lib/jenkins/user_variable-"${BUILD_NUMBER}".yml
+    sed -i "s/mon3/\${monthreeip}/" /var/lib/jenkins/user_variable-"${BUILD_NUMBER}".yml
+'''
+
+sh '''
+   cp /var/lib/jenkins/sso_variable.yml /var/lib/jenkins/sso_variable-${BUILD_NUMBER}.yml
+   sed -i "s,metadata_url_,\${sp_oidc_provider_metadata_url}," /var/lib/jenkins/sso_variable-"${BUILD_NUMBER}".yml
+   sed -i "s,client_id_,\${sp_oidc_client_id}," /var/lib/jenkins/sso_variable-"${BUILD_NUMBER}".yml
+   sed -i "s,client_secret_,\${sp_oidc_client_secret}," /var/lib/jenkins/sso_variable-"${BUILD_NUMBER}".yml
+   sed -i "s,entity_id_url,\${entity_ids}," /var/lib/jenkins/sso_variable-"${BUILD_NUMBER}".yml
    
-    String[] str;
-      line = disks.split('\n');
+''' 
+
+}
+```
+  
+###### Stage 3: Colne the repository
+
+This stage is cloning the openstack-ansible in /opt directory in deployment node.
+
+*The code snippet from the Jenkins file for Clone the repository stage*
+
+
+```shell
+stage('Colne the repository') {
+
+    println "Passed deployment IP : ${deployment_node_ip}"
+sh '''
+    ssh -i /var/lib/jenkins/id_rsa root@"${deployment_node_ip}" "rm -rf /opt/openstack-ansible" 
+    ssh -i /var/lib/jenkins/id_rsa root@"${deployment_node_ip}" "git clone -b ${OSA_branch} ${OSA_repo} /opt/openstack-ansible" 
       
-    for( String values : line ){
-       items = values.split(',')
-       file_name = items[0]
-       vardata.journal_size = items[1]
-       vardata.logfile_path = items[2]
-       vardata.nvme_device = items[3]
-       playdata[0].hosts = items[0]
-       playdata[0].tasks[0].include_vars.file = "lv-vars-${file_name}.yaml"
-       
-       items.eachWithIndex { item, index ->
-           println "$line" "$item"
-           if (index>3){
-           vardata.hdd_devices[index - 4] = "$item"
-           }
-       }
-    writeYaml file: "/var/lib/jenkins/ceph/${BUILD_NUMBER}/lv-vars-${file_name}.yaml", data: vardata, overwrite: true
-    writeYaml file: "/var/lib/jenkins/ceph/${BUILD_NUMBER}/lv-create-${file_name}.yaml", data: playdata, overwrite: true
-   }
-    allvar = readYaml file: "/var/lib/jenkins/ceph/all.yaml"
-    allvar.dashboard_enabled = "$enable_ceph_dashboard"
-    allvar.generate_fsid = "$generate_fsid"
-    allvar.fsid = "$fsid"
-    allvar.monitor_address_block = "$monitor_address_block"
-    allvar.public_network = "$public_network"
-    allvar.cluster_network = "$cluster_network"
-    allvar.monitor_interface = "$monitor_interface"
+'''
     
-    writeYaml file: "/var/lib/jenkins/ceph/${BUILD_NUMBER}/all.yaml", data: allvar, overwrite: true
 }
 ```
+  
+###### Stage 4: Anisble_bootstraping
 
-###### Stage 4: Clone repo
-This stage is cloning the ceph ansible repo by executing the deployment.sh in the deployment node.
+This stage will run the bootstrap-ansible.sh script which is available in /opt/openstack-ansible/scripts folder.
 
-*The code snippet from the Jenkins file for Clone repo stage*
-
-```shell
-stage('Clone repo') {
-    sh """
-       sleep 3600
-       scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no  "/var/lib/jenkins/ceph/deployment.sh" root@"${deployment_node_ip}":/tmp/deployment.sh
-       ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}" 'chmod +x /tmp/deployment.sh;/tmp/deployment.sh'
-    """
-}
-```
-
-###### Stage 5: Create inventory
-This stage creates the inventory file in the Jenkins server by using ‘inventory’ variable which was declared in parameter section.
-
-*The code snippet from the Jenkins file for Create inventory stage*
+*The code snippet from the Jenkins file for Anisble_bootstraping stage*
 
 ```shell
-stage('Create inventory'){
-    sh 'echo "${inventory}" > "/var/lib/jenkins/ceph/${BUILD_NUMBER}/hosts-${BUILD_NUMBER}"'
-}
-```
-
-###### Stage 6: copy updated files
-This stage copies all the updated files from /var/lib/jenkins/ceph/ directory to deployment host in the respective location for deployment.
-
-*The code snippet from the Jenkins file for copy updated stage*
-
-```shell
-stage ('copy updated files'){
-    sh """
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no "/var/lib/jenkins/ceph/${BUILD_NUMBER}/hosts-${BUILD_NUMBER}" root@"${deployment_node_ip}":/etc/ansible/hosts
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no  /var/lib/jenkins/ceph/${BUILD_NUMBER}/lv-vars-*.yaml root@"${deployment_node_ip}":/usr/share/ceph-ansible/infrastructure-playbooks/vars/
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no  /var/lib/jenkins/ceph/${BUILD_NUMBER}/lv-create-*.yaml root@"${deployment_node_ip}":/usr/share/ceph-ansible/infrastructure-playbooks/
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no  '/var/lib/jenkins/ceph/${BUILD_NUMBER}/all.yaml' root@"${deployment_node_ip}":/etc/ansible/group_vars/all.yml
-    """
-}
-```
-
-###### Stage 7: Execute lvcreate
-In this stage  lvcreate is achieved in Jenkins pipeline by splitting the disks variable and assigned to item variable and lvcreate is executed for both the server groups (HP and Dell).
-
-The code snippet from the Jenkins file for execute lvcreate stage
-
-```shell
-stage('Execute lvcreate'){
-        String[] str;
-      line = disks.split('\n');
-      
-    for( String values : line ){
-       items = values.split(',')
-       file_name = items[0]
-       sh """
-       ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}" "cd /usr/share/ceph-ansible/infrastructure-playbooks/;echo "Executing lvcreate for Hostgroup ${file_name}" ;ansible-playbook lv-create-${file_name}.yaml"
-       """
-}
-}
-```
-
-###### Stage 8: Create lv files perhost
-lv files for each host: the disk variable is created with the default value and then disk variable is split based on ‘\n’ character to divide the server groups. Then each divide group is assigned to line variable to traverse. Item is assigned with line and item[0] is assigned to filename and item[2] is assigned to logfile_path.  Using these variables lv files created for each host.
-
-
-*The code snippet from the Jenkins file for execute lvcreate stage*
-
-```shell
-stage('Create lv files perhost'){
-    
-    String[] str;
-      line = disks.split('\n');
-      
-    for( String values : line ){
-       items = values.split(',')
-       file_name = items[0]
-       logfile_path = items[2]
-       sh """
-    mkdir -p  "/var/lib/jenkins/ceph/${BUILD_NUMBER}/host_vars"
-    ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}"  "ansible "${file_name}" --list-hosts   | tail -n +2 |sed 's/^ *//g'" > /var/lib/jenkins/ceph/"${BUILD_NUMBER}"/"${file_name}"_hosts
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no -pr root@${deployment_node_ip}:/usr/share/ceph-ansible/infrastructure-playbooks/${logfile_path} /var/lib/jenkins/ceph/${BUILD_NUMBER}/
-    for value in `cat /var/lib/jenkins/ceph/${BUILD_NUMBER}/"${file_name}_hosts"`;
-        do 
-        cp /var/lib/jenkins/ceph/osds.yaml  /var/lib/jenkins/ceph/${BUILD_NUMBER}/host_vars/\$value
-        cat /var/lib/jenkins/ceph/${BUILD_NUMBER}/${logfile_path} |tail +3 >> /var/lib/jenkins/ceph/${BUILD_NUMBER}/host_vars/\$value
-        done
-    
-    scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no -pr /var/lib/jenkins/ceph/${BUILD_NUMBER}/host_vars root@${deployment_node_ip}:/etc/ansible/
-    """
+stage('Anisble_bootstraping') {
  
-    }
+sh '''
+    ssh -i /var/lib/jenkins/id_rsa  root@"${deployment_node_ip}" "cd /opt/openstack-ansible/scripts; ./bootstrap-ansible.sh" 
+ ''' 
+}
 ```
+  
+###### Stage 5: Copy etc directory
 
-###### Stage 9: Execute
-In this stage site.yaml  sample file is copied to site.yaml file and then copied and excecuted in deployment node
+This stage copy etc directory from /opt/openstack-ansible/etc/openstack_deploy to /etc of the deployment host
 
-*The code snippet from the Jenkins file for Execute stage*
+*The code snippet from the Jenkins file for Copy etc directory stage*
 
 ```shell
-stage('Execute ')
-    sh """
-    ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}" "cd /usr/share/ceph-ansible/; cp site.yml.sample site.yml; ansible-playbook site.yml"
-    """
+stage('Copy etc directory') {
+sh  '''
+   ssh -i /var/lib/jenkins/id_rsa  root@"${deployment_node_ip}" "cp -pr /opt/openstack-ansible/etc/openstack_deploy /etc/ && cd /opt/openstack-ansible && ./scripts/pw-token-gen.py --file /etc/openstack_deploy/user_secrets.yml"
+'''
+}
+```
+
+###### Stage 6: Move Updated yamls to deployment node
+
+This stage copies the yaml file updated from Jenkins server to deployment host.
+
+*The code snippet from the Jenkins file for Move Updated yamls to deployment node stage*
+  
+```shell
+stage ('Move Updated yamls to deployment node') {
+
+sh  """
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/openstack_user_config-${BUILD_NUMBER}.yml root@"${deployment_node_ip}":/etc/openstack_deploy/openstack_user_config.yml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/user_variable-${BUILD_NUMBER}.yml root@"${deployment_node_ip}":/etc/openstack_deploy/user_variable.yml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/sso_variable-${BUILD_NUMBER}.yml root@"${deployment_node_ip}":/etc/openstack_deploy/sso_variable.yml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/grafana.yaml root@"${deployment_node_ip}":/etc/openstack_deploy/env.d/grafana.yaml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/masakari.yaml root@"${deployment_node_ip}":/etc/openstack_deploy/env.d/masakari.yaml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/prometheus.yaml root@"${deployment_node_ip}":/etc/openstack_deploy/env.d/prometheus.yaml
+   scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/ops-exporter.yaml root@"${d eployment_node_ip}":/etc/openstack_deploy/env.d/ops-exporter.yaml
+"""
+
+}
+```
+  
+###### Stage 7: Execute OSA playbooks
+
+In this stage first it is  moving into /opt/openstack-ansible/playbooks and from there it is executing the playbook everything.yaml for actual deployment of openstack.
+
+*The code snippet from the Jenkins file for Execute OSA playbooks stage*
+
+```shell
+stage ('Execute OSA playbooks') {
+
+sh """
+    ssh -i /var/lib/jenkins/id_rsa  root@"${deployment_node_ip}" "cd /opt/openstack-ansible/playbooks/ ; openstack-ansible setup-everything.yml "
+"""   
+}
+```
+  
+###### Stage 8: Copy Monitoring role
+
+This stage is copying the monitoring.tar to deployment host and then executing the monitoring_start.yml.
+
+*The code snippet from the Jenkins file for Copy Monitoring role stage*
+
+```shell
+stage ('Copy Monitoring role'){
+sh """
+    scp -i /var/lib/jenkins/id_rsa /var/lib/jenkins/monitoring.tar root@"${deployment_node_ip}":/etc/ansible/role/
+    ssh -i /var/lib/jenkins/id_rsa  root@"${deployment_node_ip}" "cd /etc/ansible/role ; tar -xvf monitoring.tar; cp -r monitoring/playbook/ /opt/openstack-ansible/playbooks/; cd /opt/openstack-ansible/playbooks/; openstack-ansible monitoring_install.yml && openstack-ansible monitoring_start.yml"
+    
+"""
     
 }
 ```
+## Jenkins Pipeline Execution Output
+we have run this Jenkins pipeline script in the NIC lab environment. Pipeline execution of Openstack deployment is successful.
 
-###### Stage 10: Post Check
-In this stage after the playbook execution is completed ‘post check’ is done in Jenkins pipeline by running the command “ceph -s” in deployment node.
+The parameters description :
 
-*The code snippet from the Jenkins file for Post Check stage*
+*deployment_node_ip:*
+this vaiable expects hostname or IP of the deployment node. This the node where ansible is installed for ceph deployment and other prerequisites like passwordless connectivity from deployment node other nodes is achieved.
+
+*OSA_repo:*
+This is OSA Repository link which is https://github.com/openstack/openstack-ansible.git.
+
+*OSA_branch:*
+OSA branch. which defines the version of Openstack to be installed.
+
+*container_cidr:*
+This parameter defines CIDR for container network.
+
+*storage_cid:*
+This parameter defines CIDR for storage network.
+
+*tunnel_cidr:*
+This parameter defines CIDR for tunnel network.
+
+*used_ip_containe:*
+This parameter defines used IP range to avoid its assignment in container cidr for OS infra, Example: "192.168.0.10,192.168.0.30".
+
+*used_ip_storage:*
+This parameter defines used IP range to avoid its assignment in storage cidr for OS infra, Example: "192.168.0.10,192.168.0.30".
+
+*used_ip_tunne:*
+This parameter defines used IP range to avoid its assignment in tunnel cidr for OS infra, Example: "192.168.0.10,192.168.0.30".
+
+*internal_lb_vip_address:*
+This parameter defines the internal_lb_vip address.
+
+*external_lb_vip_address*
+This parameter defines the external_lb_vip address.
+
+*name_infra_one:*
+This parameter defines host name of infra1.
+
+*ip_infra_one:*
+This parameter defines IP of infra1.
+
+*name_infra_two:*
+This parameter defines host name of infra2.
+
+*ip_infra_two:*
+This parameter defines IP of infra2.
+
+*name_infra_three:*
+This parameter defines host name of infra3.
+
+*ip_infra_three:*
+This parameter defines IP of infra3.
+
+*name_compute_one:*
+This parameter defines host name of compute1.
+
+*ip_compute_one:*
+This parameter defines IP of compute1.
+
+*name_compute_two:*
+This parameter defines host name of compute2.
+
+*ip_compute_two:*
+This parameter defines IP of compute2.
+
+*name_compute_three:*
+This parameter defines host name of compute3.
+
+*ip_compute_three:*
+This parameter defines IP of compute3.
+
+*proxy_env_url:*
+This parameter defines the proxy_env_url.
+
+*lxc_hosts_container_image_url:*
+This parameter defines lxc_host_container_image_url.
+
+*security_ntp_servers:*
+This parameter defines security_ntp_servers.
+
+*haproxy_use_keepalived:*
+Need to user haproxy_use_keepalived, mark it true or false.
+
+*haproxy_ssl:*
+Need to use SSL for haproxy_ssl, mark it True of false.
+
+*openstack_service_publicuri_proto:*
+openstack_service_publicuri_proto, http or https
+
+*keepalived_ping_address:*
+This parameter defines keepalived_ping_address.
+ 
+*mononeip:*
+This parameter defines monone IP.
+
+*montwoip:*
+This parameter defines montwo IP.
+
+*monthreeip:*
+This parameter defines monthree IP.
+
+*keystone_web_server:*
+This parameter defines keystone_web_server: apahce or nginx, when using OIDC it should be defaul apache.
+
+*entity_ids:*
+This parameter defines entity_ids of OIDC link: Example: https://xyz.io/auth/realms/cloud.
+
+*sp_oidc_provider_metadata_url:*
+This parameter defines sp_oidc_provider_metadata_url. Provide the correct URL as per environment.
+
+*sp_oidc_client_id:*
+Update the correct OIDC client ID, you can get this from IDP
+
+*sp_oidc_client_secret:*
+Input the secret for user defined in sp_oidc_client_id
+
+*generate_fs:*
+Default setup-everything.yml.
+
+## We can find the console output for each stages as below:
+
+###### stage ‘update yamls’
 
 ```shell
-stage('Post Check'){
-    ssh """
-    ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@"${deployment_node_ip}" "ceph -s"
-    """
-
-}
-```
-
-**Jenkins Pipeline Execution Output**
-
-we have run this Jenkins pipeline script in the NIC lab environment. Pipeline execution of ceph deployment is successful.
-
-We can find the console output for each stages as below:
-
-###### stage 'Pre-check'
-
-```shell
-[Pipeline] properties
-[Pipeline] stage
-[Pipeline] { (Pre-check)
-[Pipeline] sh
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 ansible osds -m shell -a 'lsblk'
-[WARNING]: Invalid characters were found in group names but not replaced, use
--vvvv to see details
-sp-dev-storage1 | CHANGED | rc=0 >>
-NAME              MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-loop0               7:0    0  67.8M  1 loop /snap/lxd/22753
-loop1               7:1    0  61.9M  1 loop /snap/core20/1405
-loop2               7:2    0  43.6M  1 loop /snap/snapd/15177
-sda                 8:0    0   1.7T  0 disk 
-├─sda1              8:1    0   512M  0 part /boot/efi
-└─sda2              8:2    0   1.7T  0 part 
-  └─vgroot-lvroot 253:0    0   1.7T  0 lvm  /
-sdb                 8:16   0   1.7T  0 disk 
-sdc                 8:32   0   1.7T  0 disk 
-sdd                 8:48   0   1.7T  0 disk 
-sde                 8:64   0   1.7T  0 disk 
-sdf                 8:80   0   1.7T  0 disk 
-sdg                 8:96   0   1.7T  0 disk 
-sdh                 8:112  0   1.7T  0 disk 
-sdi                 8:128  0   1.7T  0 disk 
-sdj                 8:144  0   1.7T  0 disk 
-sdk                 8:160  0   1.7T  0 disk 
-sdl                 8:176  0   1.7T  0 disk 
-sdm                 8:192  0   1.7T  0 disk 
-sdn                 8:208  0   1.7T  0 disk 
-sdo                 8:224  0   1.7T  0 disk 
-sdp                 8:240  0   1.7T  0 disk 
-sdq                65:0    0   1.7T  0 disk 
-sdr                65:16   0   1.7T  0 disk 
-sds                65:32   0   1.7T  0 disk 
-sdt                65:48   0   1.7T  0 disk 
-sdu                65:64   0   1.7T  0 disk 
-sdv                65:80   0   1.7T  0 disk 
-sdw                65:96   0 447.1G  0 disk 
-sdx                65:112  0   1.7T  0 disk 
-sp-dev-storage5 | CHANGED | rc=0 >>
-NAME              MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-loop0               7:0    0  43.6M  1 loop /snap/snapd/15177
-loop1               7:1    0  67.8M  1 loop /snap/lxd/22753
-loop2               7:2    0  61.9M  1 loop /snap/core20/1405
-sda                 8:0    0   1.7T  0 disk 
-├─sda1              8:1    0   512M  0 part /boot/efi
-└─sda2              8:2    0   1.7T  0 part 
-  └─vgroot-lvroot 253:0    0   1.7T  0 lvm  /
-sdb                 8:16   0   1.7T  0 disk 
-sdc                 8:32   0   1.7T  0 disk 
-sdd                 8:48   0   1.7T  0 disk 
-sde                 8:64   0   1.7T  0 disk 
-sdf                 8:80   0   1.7T  0 disk 
-sdg                 8:96   0   1.7T  0 disk 
-sdh                 8:112  0   1.7T  0 disk 
-sdi                 8:128  0   1.7T  0 disk 
-sdj                 8:144  0   1.7T  0 disk 
-sdk                 8:160  0   1.7T  0 disk 
-sdl                 8:176  0   1.7T  0 disk 
-sdm                 8:192  0   1.7T  0 disk 
-sdn                 8:208  0   1.7T  0 disk 
-sdo                 8:224  0   1.7T  0 disk 
-sdp                 8:240  0   1.7T  0 disk 
-sdq                65:0    0   1.7T  0 disk 
-sdr                65:16   0   1.7T  0 disk 
-sds                65:32   0   1.7T  0 disk 
-sdt                65:48   0   1.7T  0 disk 
-sdu                65:64   0   1.7T  0 disk 
-sdv                65:80   0   1.7T  0 disk 
-sdw                65:96   0 447.1G  0 disk 
-sdx                65:112  0   1.7T  0 disk 
-```
-
-###### Stage 'Update variables'
-
-```shell
-[Pipeline] // stage
-[Pipeline] stage
-[Pipeline] { (Update variables)
-[Pipeline] sh
-+ mkdir -p /var/lib/jenkins/ceph/33/host_vars
-[Pipeline] readYaml
+[Pipeline] { (Update Yamls)
 [Pipeline] readYaml
 [Pipeline] writeYaml
+[Pipeline] sh
++ sed -i s/^  infra1/  sp-dev-infra1/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/infra1ip/10.246.184.12/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/^  infra2/  sp-dev-infra2/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/infra2ip/10.246.184.13/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/^  infra3/  sp-dev-infra3/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/infra3ip/10.246.184.14/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/^  compute1/  sp-dev-compute1/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/compute1ip/10.246.184.15/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/^  compute2/  sp-dev-compute2/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/compute2ip/10.246.184.16/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/^  compute3/  sp-dev-compute3/ /var/lib/jenkins/openstack_user_config-20.yml
++ sed -i s/compute3ip/10.246.184.17/ /var/lib/jenkins/openstack_user_config-20.yml
+[Pipeline] readYaml
 [Pipeline] writeYaml
-[Pipeline] writeYaml
-[Pipeline] writeYaml
-[Pipeline] readYaml 
-[Pipeline] writeYaml
-[Pipeline] }
-
-###### Stage 'Clone repo'
-
-```shell
-[Pipeline] // stage
-[Pipeline] stage
-[Pipeline] { (Clone repo)
 [Pipeline] sh
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no /var/lib/jenkins/ceph/deployment.sh root@sp-dev-infra1:/tmp/deployment.sh
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 chmod +x /tmp/deployment.sh;/tmp/deployment.sh
-
-WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
-
-Reading package lists...
-Building dependency tree...
-Reading state information...
-python is already the newest version (2.7.15~rc1-1).
-python-dev is already the newest version (2.7.15~rc1-1).
-git is already the newest version (1:2.17.1-1ubuntu0.11).
-The following packages were automatically installed and are no longer required:
-  bridge-utils cephadm containerd docker.io fonts-lyx ibverbs-providers
-  javascript-common libaio1 libbabeltrace1 libblas3 libdw1 libgfortran4
-  libgoogle-perftools4 libibverbs1 libjbig0 libjpeg-turbo8 libjpeg8
-  libjs-jquery libjs-jquery-ui liblapack3 liblcms2-2 libleveldb1v5
-  liblttng-ust-ctl4 liblttng-ust0 libnl-route-3-200 liboath0 librabbitmq4
-  librdkafka1 librdmacm1 libsnappy1v5 libtcmalloc-minimal4 libtiff5 liburcu6
-  libwebp6 libwebpdemux2 libwebpmux3 nvme-cli pigz python-attr python-funcsigs
-  python-matplotlib-data python-pastedeploy-tpl python-pluggy python-py
-  python-pytest python3-bcrypt python3-bs4 python3-cherrypy3 python3-cycler
-  python3-dateutil python3-decorator python3-fasteners python3-html5lib
-  python3-joblib python3-kubernetes python3-logutils python3-lxml python3-mako
-  python3-matplotlib python3-monotonic python3-nose python3-numpy
-  python3-oauth2client python3-olefile python3-paste python3-pastedeploy
-  python3-pastescript python3-pecan python3-pil python3-pluggy
-  python3-prettytable python3-py python3-pyinotify python3-pyparsing
-  python3-pytest python3-repoze.lru python3-routes python3-rsa python3-scipy
-  python3-simplegeneric python3-simplejson python3-singledispatch
-  python3-sklearn python3-sklearn-lib python3-sqlalchemy python3-tempita
-  python3-tz python3-uritemplate python3-waitress python3-webencodings
-  python3-webob python3-websocket python3-webtest python3-werkzeug runc
-  smartmontools ubuntu-fan
-```
-
-###### Stage 'Create inventory'
-
-```shell
-[Pipeline] // stage
-[Pipeline] stage
-[Pipeline] { (Create inventory)
++ sed -i s/ntpserver/164.100.255.1/ /var/lib/jenkins/user_variable-20.yml
++ sed -i s/mon1/10.246.184.12/ /var/lib/jenkins/user_variable-20.yml
++ sed -i s/mon2/10.246.184.13/ /var/lib/jenkins/user_variable-20.yml
++ sed -i s/mon3/10.246.184.14/ /var/lib/jenkins/user_variable-20.yml
 [Pipeline] sh
-+ echo [all]
-sp-dev-infra[1:3]
-sp-dev-compute[1:3]
-sp-dev-storage[1:8]
-[all:vars]
-ansible_python_interpreter=/usr/bin/python3
-[mons]
-sp-dev-infra[1:3]
-[mons:vars]
-ansible_python_interpreter=/usr/bin/python3
-[osds]
-sp-dev-storage[1:8]
-[osds-dell]
-sp-dev-storage[1:5]
-[osds-hp]
-sp-dev-storage[6:8]
-[mgrs]
-sp-dev-infra[1:3]
-[mgrs:vars]
-ansible_python_interpreter=/usr/bin/python3
-[osds:vars]
-ansible_python_interpreter=/usr/bin/python3
-[osds-dell:vars]
-ansible_python_interpreter=/usr/bin/python3
-[osds-hp:vars]
-ansible_python_interpreter=/usr/bin/python3
++ cp /var/lib/jenkins/sso_variable.yml /var/lib/jenkins/sso_variable-20.yml
++ sed -i s,metadata_url_,https://sso.cloud.gov.in/auth/realms/test-v1/.well-known/openid-configuration, /var/lib/jenkins/sso_variable-20.yml
++ sed -i s,client_id_,os_cloud_1, /var/lib/jenkins/sso_variable-20.yml
++ sed -i s,client_secret_,C8yCHEXYNauWA49DMp01pWKnASnp27FW, /var/lib/jenkins/sso_variable-20.yml
++ sed -i s,entity_id_url,https://sso.cloud.gov.in/auth/realms/test-v1/, /var/lib/jenkins/sso_variable-20.yml
 [Pipeline] }
 ```
 
-###### stage 'copy updated files'
+###### Stage 'clone the repository'
 
 ```shell
-[Pipeline] // stage
 [Pipeline] stage
-[Pipeline] { (copy updated files)
+[Pipeline] { (Colne the repository)
+[Pipeline] echo
+Passed deployment IP : sp-dev-infra2
 [Pipeline] sh
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no /var/lib/jenkins/ceph/33/hosts-33 root@sp-dev-infra1:/etc/ansible/hosts
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no /var/lib/jenkins/ceph/33/lv-vars-osds-dell.yaml /var/lib/jenkins/ceph/33/lv-vars-osds-hp.yaml root@sp-dev-infra1:/usr/share/ceph-ansible/infrastructure-playbooks/vars/
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no /var/lib/jenkins/ceph/33/lv-create-osds-dell.yaml /var/lib/jenkins/ceph/33/lv-create-osds-hp.yaml root@sp-dev-infra1:/usr/share/ceph-ansible/infrastructure-playbooks/
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no /var/lib/jenkins/ceph/33/all.yaml root@sp-dev-infra1:/etc/ansible/group_vars/all.yml
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 rm -rf /opt/openstack-ansible
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 git clone -b stable/train https://github.com/openstack/openstack-ansible.git /opt/openstack-ansible
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
+Cloning into '/opt/openstack-ansible'...
 [Pipeline] }
 ```
 
-###### Stage 'Execute lvcreate'
+
+###### Stage 'Ansible_bootstraping'
 
 ```shell
-[Pipeline] stage
-[Pipeline] { (Execute lvcreate)
+[Pipeline] { (Anisble_bootstraping)
 [Pipeline] sh
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 cd /usr/share/ceph-ansible/infrastructure-playbooks/;echo Executing lvcreate for Hostgroup osds-dell ;ansible-playbook lv-create-osds-dell.yaml
-Executing lvcreate for Hostgroup osds-dell
-[WARNING]: Invalid characters were found in group names but not replaced, use
--vvvv to see details
-
-PLAY [creates logical volumes for the bucket index or fs journals on a single device.] ***
-
-TASK [Gathering Facts] *********************************************************
-ok: [sp-dev-storage3]
-ok: [sp-dev-storage2]
-ok: [sp-dev-storage4]
-ok: [sp-dev-storage5]
-ok: [sp-dev-storage1]
-
-TASK [include vars of lv_vars.yaml] ********************************************
-ok: [sp-dev-storage1]
-ok: [sp-dev-storage2]
-ok: [sp-dev-storage3]
-ok: [sp-dev-storage4]
-ok: [sp-dev-storage5]
-
-TASK [fail if nvme_device is not defined] **************************************
-skipping: [sp-dev-storage1]
-skipping: [sp-dev-storage2]
-skipping: [sp-dev-storage3]
-skipping: [sp-dev-storage4]
-skipping: [sp-dev-storage5]
-
-TASK [install lvm2] ************************************************************
-ok: [sp-dev-storage5]
-ok: [sp-dev-storage4]
-ok: [sp-dev-storage1]
-ok: [sp-dev-storage3]
-ok: [sp-dev-storage2]
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 cd /opt/openstack-ansible/scripts; ./bootstrap-ansible.sh
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ export HTTP_PROXY=
++ HTTP_PROXY=
++ export HTTPS_PROXY=
++ HTTPS_PROXY=
++ export ANSIBLE_PACKAGE=ansible==2.8.13
++ ANSIBLE_PACKAGE=ansible==2.8.13
++ export ANSIBLE_ROLE_FILE=ansible-role-requirements.yml
++ ANSIBLE_ROLE_FILE=ansible-role-requirements.yml
++ export USER_ROLE_FILE=user-role-requirements.yml
++ USER_ROLE_FILE=user-role-requirements.yml
++ export SSH_DIR=/root/.ssh
++ SSH_DIR=/root/.ssh
++ export DEBIAN_FRONTEND=noninteractive
++ DEBIAN_FRONTEND=noninteractive
++ export SETUP_ARA=false
++ SETUP_ARA=false
++ export PIP_OPTS=
++ PIP_OPTS=
++ export OSA_WRAPPER_BIN=scripts/openstack-ansible.sh
++ OSA_WRAPPER_BIN=scripts/openstack-ansible.sh
+++ dirname ./bootstrap-ansible.sh
++ cd ./..
++ info_block 'Checking for required libraries.'
++ source scripts/scripts-library.sh
+++ LINE=----------------------------------------------------------------------
+++ ANSIBLE_PARAMETERS=
++++ date +%s
+++ STARTTIME=1652601567
+++ COMMAND_LOGS=/openstack/log/ansible_cmd_logs
+++ PIP_COMMAND=/opt/ansible-runtime/bin/pip
+++ ZUUL_PROJECT=
+++ GATE_EXIT_LOG_COPY=false
+++ GATE_EXIT_LOG_GZIP=true
+++ GATE_EXIT_RUN_ARA=true
+++ GATE_EXIT_RUN_DSTAT=true
+++ [[ -n '' ]]
+++ '[' -z '' ']'
++++ grep -c '^processor' /proc/cpuinfo
+++ CPU_NUM=80
+++ '[' 80 -lt 10 ']'
+++ ANSIBLE_FORKS=10
+++ trap 'exit_fail 398 0 '\''Received STOP Signal'\''' SIGHUP SIGINT SIGTERM
+++ trap 'exit_fail 399 0' ERR
++++ id -u
+++ '[' 0 '!=' 0 ']'
+++ '[' '!' -d etc -a '!' -d scripts -a '!' -d playbooks ']'
 ```
 
-###### Stage 'Create lv files perhost'
-
-```shell
-[Pipeline] // stage
-[Pipeline] stage
-[Pipeline] { (Create lv files perhost)
-[Pipeline] sh
-+ mkdir -p /var/lib/jenkins/ceph/33/host_vars
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 ansible osds-dell --list-hosts   | tail -n +2 |sed 's/^ *//g'
-[WARNING]: Invalid characters were found in group names but not replaced, use
--vvvv to see details
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no -pr root@sp-dev-infra1:/usr/share/ceph-ansible/infrastructure-playbooks/./lv-create-dell.log /var/lib/jenkins/ceph/33/
-+ cat /var/lib/jenkins/ceph/33/osds-dell_hosts
-+ cp /var/lib/jenkins/ceph/osds.yaml /var/lib/jenkins/ceph/33/host_vars/sp-dev-storage1
-+ cat /var/lib/jenkins/ceph/33/./lv-create-dell.log
-+ tail +3
-+ cp /var/lib/jenkins/ceph/osds.yaml /var/lib/jenkins/ceph/33/host_vars/sp-dev-storage2
-+ cat /var/lib/jenkins/ceph/33/./lv-create-dell.log
-+ tail +3
-+ cp /var/lib/jenkins/ceph/osds.yaml /var/lib/jenkins/ceph/33/host_vars/sp-dev-storage3
-+ cat /var/lib/jenkins/ceph/33/./lv-create-dell.log
-+ tail +3
-+ cp /var/lib/jenkins/ceph/osds.yaml /var/lib/jenkins/ceph/33/host_vars/sp-dev-storage4
-+ cat /var/lib/jenkins/ceph/33/./lv-create-dell.log
-+ tail +3
-+ cp /var/lib/jenkins/ceph/osds.yaml /var/lib/jenkins/ceph/33/host_vars/sp-dev-storage5
-+ cat /var/lib/jenkins/ceph/33/./lv-create-dell.log
-+ tail +3
-+ scp -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no -pr /var/lib/jenkins/ceph/33/host_vars root@sp-dev-infra1:/etc/ansible/
-```
-
-###### Stage ' Execute '
+###### Stage ' Copy etc directory'
 
 ```shell
 [Pipeline] stage
-[Pipeline] { (Execute )
+[Pipeline] { (Copy etc directory)
 [Pipeline] sh
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 cd /usr/share/ceph-ansible/; cp site.yml.sample site.yml; ansible-playbook site.yml
-[WARNING]: Could not match supplied host pattern, ignoring: mdss
-[WARNING]: Could not match supplied host pattern, ignoring: rgws
-[WARNING]: Could not match supplied host pattern, ignoring: nfss
-[WARNING]: Could not match supplied host pattern, ignoring: rbdmirrors
-[WARNING]: Could not match supplied host pattern, ignoring: clients
-[WARNING]: Could not match supplied host pattern, ignoring: iscsigws
-[WARNING]: Could not match supplied host pattern, ignoring: iscsi-gws
-[WARNING]: Could not match supplied host pattern, ignoring: grafana-server
-[WARNING]: Could not match supplied host pattern, ignoring: rgwloadbalancers
-```
-
-###### Stage 'Post Check'
-
-```shell
-[Pipeline] // stage
-[Pipeline] stage
-[Pipeline] { (Post Check)
-[Pipeline] sh
-+ ssh -i /var/lib/jenkins/id_rsa -o StrictHostKeyChecking=no root@sp-dev-infra1 ceph -s
-  cluster:
-    id:     6fad73d1-9cf6-47c0-8ac1-227a79a8d276
-    health: HEALTH_WARN
-            mons are allowing insecure global_id reclaim
-            clock skew detected on mon.sp-dev-infra2, mon.sp-dev-infra3
-            1 pgs not deep-scrubbed in time
-            1 pgs not scrubbed in time
- 
-  services:
-    mon: 3 daemons, quorum sp-dev-infra1,sp-dev-infra2,sp-dev-infra3 (age 7m)
-    mgr: sp-dev-infra2(active, since 6m), standbys: sp-dev-infra3, sp-dev-infra1
-    osd: 178 osds: 178 up (since 67s), 178 in (since 67s)
- 
-  data:
-    pools:   1 pools, 1 pgs
-    objects: 0 objects, 0 B
-    usage:   183 GiB used, 249 TiB / 249 TiB avail
-    pgs:     1 active+clean
- 
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 cp -pr /opt/openstack-ansible/etc/openstack_deploy /etc/ && cd /opt/openstack-ansible && ./scripts/pw-token-gen.py --file /etc/openstack_deploy/user_secrets.yml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
+Creating backup file [ /etc/openstack_deploy/user_secrets.yml.tar ]
+Operation Complete, [ /etc/openstack_deploy/user_secrets.yml ] is ready
 [Pipeline] }
-[Pipeline] // stage
+```
+
+###### stage 'Move updated yaml to deployment node'
+
+
+```shell
+[Pipeline] stage
+[Pipeline] { (Move Updated yamls to deployment node)
+[Pipeline] sh
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/openstack_user_config-20.yml root@sp-dev-infra2:/etc/openstack_deploy/openstack_user_config.yml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/user_variable-20.yml root@sp-dev-infra2:/etc/openstack_deploy/user_variable.yml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/sso_variable-20.yml root@sp-dev-infra2:/etc/openstack_deploy/sso_variable.yml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/grafana.yaml root@sp-dev-infra2:/etc/openstack_deploy/env.d/grafana.yaml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/masakari.yaml root@sp-dev-infra2:/etc/openstack_deploy/env.d/masakari.yaml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/prometheus.yaml root@sp-dev-infra2:/etc/openstack_deploy/env.d/prometheus.yaml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/ops-exporter.yaml root@sp-dev-infra2:/etc/openstack_deploy/env.d/ops-exporter.yaml
+Failed to add the host to the list of known hosts (/var/lib/jenkins/.ssh/known_hosts).
+Warning: the ECDSA host key for 'sp-dev-infra2' differs from the key for the IP address '10.246.184.13'
+Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
 [Pipeline] }
-[Pipeline] // stage
-[Pipeline] }
-[Pipeline] // node
-[Pipeline] End of Pipeline
-Finished: SUCCESS
+```
+
+###### Stage 'Execute OSA playbooks'
+
+```shell
 ```
 
 
+###### Stage ‘Copy Monitoring role’
 
+
+```shell
+```
 
 
 
