@@ -4,11 +4,12 @@ Jenkins Pipeline (or simply "Pipeline") is a suite of plugins which supports imp
 The steps of the Openstack_Deployment.docx are taken for the Jenkins pipeline. 
 
 ## Prerequisite:
-•	Install OS  on all Hosts and do networking and check all servers are able to access from terminal. Ensure all Hosts should be able to ping IP from each host to every other hosts. 
-•	Add below parameter in all servers for add time & date in history for troubleshooting 
-•	<Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> /etc/profile 
-•	<Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> ~/.bash_profile 
-•	 Make all the servers passwordless from Deployment Node. 
+	> Install OS  on all Hosts and do networking and check all servers are able to access from terminal. Ensure all Hosts should be able to ping IP from 
+      each host to every other hosts. 
+    > Add below parameter in all servers for add time & date in history for troubleshooting 
+    > <Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> /etc/profile 
+    > <Deployment node># echo "export HISTTIMEFORMAT='%F %T '" >> ~/.bash_profile 
+    > Make all the servers passwordless from Deployment Node. 
 
 
 ## Stages:
@@ -44,7 +45,7 @@ properties(
 
 *The code snippet from the Jenkins file for parameter declaration*
 
-  ```shell
+```shell
 properties(
     [
         parameters(
@@ -90,7 +91,7 @@ properties(
 
     ]
     ) 
-    ```
+```
   
 ###### Stage 2: Update Yamls
 The Stage 2 update the yaml files by taking the input value from the paramterers. All the values required are updated in the yaml file.
