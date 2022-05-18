@@ -267,28 +267,28 @@ we have run this Jenkins pipeline script in the NIC lab environment. Pipeline ex
 
 The parameters description :
 
-*deployment_node_ip:*
+**deployment_node_ip:**
 this vaiable expects hostname or IP of the deployment node. This the node where ansible is installed for ceph deployment and other prerequisites like passwordless connectivity from deployment node other nodes is achieved.
 
-*OSA_repo:*
+**OSA_repo:**
 This is OSA Repository link which is https://github.com/openstack/openstack-ansible.git.
 
-*OSA_branch:*
+**OSA_branch:**
 OSA branch. which defines the version of Openstack to be installed.
 
-*container_cidr:*
+**container_cidr:**
 This parameter defines CIDR for container network.
 
-*storage_cid:*
+**storage_cid:**
 This parameter defines CIDR for storage network.
 
-*tunnel_cidr:*
+**tunnel_cidr:**
 This parameter defines CIDR for tunnel network.
 
-*used_ip_containe:*
+**used_ip_containe:**
 This parameter defines used IP range to avoid its assignment in container cidr for OS infra, Example: "192.168.0.10,192.168.0.30".
 
-*used_ip_storage:*
+**used_ip_storage:**
 This parameter defines used IP range to avoid its assignment in storage cidr for OS infra, Example: "192.168.0.10,192.168.0.30".
 
 *used_ip_tunne:*
@@ -555,6 +555,84 @@ Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
 ###### Stage 'Execute OSA playbooks'
 
 ```shell
+[Pipeline] stage
+[Pipeline] { (Execute OSA playbooks)
+[Pipeline] sh
++ echo Befor Execution of host playbooks +++++++++++++++++++++++++++++++++++++++++++++++
+Befor Execution of host playbooks +++++++++++++++++++++++++++++++++++++++++++++++
++ echo Befor Execution of host openstack playbook and after infrastructure playbook +++++++++++++++++++++++++++++++++++++++++++++++
+Befor Execution of host openstack playbook and after infrastructure playbook +++++++++++++++++++++++++++++++++++++++++++++++
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 cd /opt/openstack-ansible/playbooks/;ansible sp-dev-infra[1..3]-host_containers -m shell -a "ping -c1 10.246.184.1"
+------------------------------------------------------------------------------
+* WARNING                                                                    *
+* You are accessing a secured system and your actions will be logged along   *
+* with identifying information. Disconnect immediately if you are not an     *
+* authorized user of this system.                                            *
+------------------------------------------------------------------------------
+[0;35mVariable files: "-e @/etc/openstack_deploy/user_secrets.yml -e @/etc/openstack_deploy/user_variable.yml -e @/etc/openstack_deploy/user_variables.yml "[0m
+[WARNING]: Invalid characters were found in group names but not replaced, use
+-vvvv to see details
+[WARNING]: Unable to parse /etc/openstack_deploy/inventory.ini as an inventory
+source
+sp-dev-infra1_galera_container-1084b8a8 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.623 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.623/0.623/0.623/0.000 ms
+sp-dev-infra1_rsyslog_container-815b399b | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.484 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.484/0.484/0.484/0.000 ms
+sp-dev-infra1_horizon_container-f2d50e48 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.521 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.521/0.521/0.521/0.000 ms
+sp-dev-infra1_heat_api_container-35aabe28 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.555 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.555/0.555/0.555/0.000 ms
+sp-dev-infra1_utility_container-6dd1678d | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.543 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.543/0.543/0.543/0.000 ms
+sp-dev-infra1_memcached_container-72f36e12 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.529 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.529/0.529/0.529/0.000 ms
+sp-dev-infra1_neutron_server_container-6b9a5c80 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.544 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.544/0.544/0.544/0.000 ms
+sp-dev-infra1_placement_container-51c60932 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.774 ms
+
+--- 10.246.184.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.774/0.774/0.774/0.000 ms
+sp-dev-infra1_cinder_api_container-92d07d92 | CHANGED | rc=0 >>
+PING 10.246.184.1 (10.246.184.1) 56(84) bytes of data.
+64 bytes from 10.246.184.1: icmp_seq=1 ttl=64 time=0.725 ms
 ```
 
 
@@ -562,6 +640,80 @@ Offending key for IP in /var/lib/jenkins/.ssh/known_hosts:2
 
 
 ```shell
+[Pipeline] stage
+[Pipeline] { (Copy Monitoring role)
+[Pipeline] sh
++ scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa /var/lib/jenkins/monitoring.tar root@sp-dev-infra2:/etc/ansible/roles/
+------------------------------------------------------------------------------
+* WARNING                                                                    *
+* You are accessing a secured system and your actions will be logged along   *
+* with identifying information. Disconnect immediately if you are not an     *
+* authorized user of this system.                                            *
+------------------------------------------------------------------------------
++ ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/id_rsa root@sp-dev-infra2 cd /etc/ansible/roles ; tar -xvf monitoring.tar; cp -r monitoring/playbooks/* /opt/openstack-ansible/playbooks/
+------------------------------------------------------------------------------
+* WARNING                                                                    *
+* You are accessing a secured system and your actions will be logged along   *
+* with identifying information. Disconnect immediately if you are not an     *
+* authorized user of this system.                                            *
+------------------------------------------------------------------------------
+monitoring/
+monitoring/.gitignore
+monitoring/tasks/
+monitoring/tasks/install-prometheus.yml
+monitoring/tasks/main.yml
+monitoring/tasks/install-node-exporter.yml
+monitoring/tasks/install-libvirt-exporter.yml
+monitoring/tasks/grafana-imports.yml
+monitoring/tasks/install-grafana.yml
+monitoring/tasks/install-openstack-exporter.yml
+monitoring/defaults/
+monitoring/defaults/main.yml
+monitoring/.travis.yml
+monitoring/files/
+monitoring/files/dashboard/
+monitoring/files/dashboard/node-exporter-for-prometheus-dashboard-en-v20201010_rev9.json
+monitoring/files/dashboard/openstack-dashboard.json
+monitoring/files/dashboard/node-exporter.json
+monitoring/files/dashboard/openstack-vm-stats.json
+monitoring/files/rules.yml
+monitoring/files/node_exporter-1.0.1.linux-amd64.tar.gz
+monitoring/files/openstack-exporter.tar.gz
+monitoring/files/prometheus-2.23.0.linux-amd64.tar.gz
+monitoring/files/libvirt-exporter.tar.gz
+monitoring/templates/
+monitoring/templates/openstack_exporter.service.j2
+monitoring/templates/prometheus.service.j2
+monitoring/templates/grafana.ini.j2
+monitoring/templates/clouds.yaml.j2
+monitoring/templates/dashboards/
+monitoring/templates/dashboards/nodes.json.j2
+monitoring/templates/dashboards/cluster.json.j2
+monitoring/templates/clouds.yml.j2
+monitoring/templates/node_exporter.service.j2
+monitoring/templates/libvirt_exporter.service.j2
+monitoring/templates/prometheus.yml.j2
+monitoring/templates/datasource.json.j2
+monitoring/README.md
+monitoring/vars/
+monitoring/vars/main.yml
+monitoring/playbooks/
+monitoring/playbooks/inventory
+monitoring/playbooks/monitoring_stop.yml
+monitoring/playbooks/runtests.sh
+monitoring/playbooks/monitoring_start.yml
+monitoring/playbooks/testsuite.sh
+monitoring/playbooks/monitoring_install.yml
+monitoring/handlers/
+monitoring/handlers/main.yml
+monitoring/meta/
+monitoring/meta/main.yml
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+Finished: SUCCESS
 ```
 
 
